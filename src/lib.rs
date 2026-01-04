@@ -3,8 +3,13 @@
 type UInt = u128;
 type Base = u128;
 
-fn gcd(a: UInt, b: Base) -> Base {
-    todo!()
+fn gcd(mut a: UInt, mut b: UInt) -> UInt {
+    while b != 0 {
+        let r = a % b;
+        a = b;
+        b = r;
+    }
+    a
 }
 
 fn divmod(a: UInt, b: UInt) -> (UInt, UInt) {
@@ -17,7 +22,7 @@ fn divmod_base(a: UInt, b: Base) -> (UInt, Base) {
 }
 
 pub struct IntegerPart {
-    n: UInt,
+    pub n: UInt,
 }
 
 impl IntegerPart {
@@ -36,41 +41,46 @@ impl IntegerPart {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ProperFraction {
-    r: UInt, // remainder
+    p: UInt, // remainder
     // TODO: Make this NonZero
     q: UInt, // original denominator
 }
 
 impl ProperFraction {
     pub fn new(p: UInt, q: UInt) -> (IntegerPart, Self) {
-        let mut this = Self { r: p, q };
-        let n = this.pull_digit(q);
+        let mut this = Self { p, q };
+        let n = this.pull_digit(1);
 
         (IntegerPart { n }, this)
     }
 
     pub fn simplify(&mut self) -> u128 {
-        let g = gcd(self.r, self.q);
+        let g = gcd(self.p, self.q);
 
         self.q /= g;
-        self.r /= g;
+        self.p /= g;
 
         g
     }
 
     pub fn pull_digit(&mut self, base: Base) -> UInt {
-        let (d, new_r) = divmod(self.r * base as UInt, self.q);
-        self.r = new_r;
+        let (d, new_r) = divmod(self.p * base as UInt, self.q);
+        self.p = new_r;
         d
     }
 
-    pub fn denominator(&self) -> UInt {
-        self.q
+    pub fn denominator(&self) -> &UInt {
+        &self.q
+    }
+
+    pub fn numerator(&self) -> &UInt {
+        &self.p
     }
 }
 
+#[derive(Debug)]
 pub enum BaseConvertorState {
     Terminal {
         // TODO: This can be NonZero
@@ -83,6 +93,7 @@ pub enum BaseConvertorState {
     },
 }
 
+#[derive(Debug)]
 pub struct BaseConvertor {
     base: Base,
     fractional: ProperFraction,
@@ -91,22 +102,20 @@ pub struct BaseConvertor {
 
 type Digit = Base;
 
+#[derive(Debug)]
 pub enum Token {
     Terminal(Digit),
     Repeating(Digit),
-    RepeatingStart(Digit),
-    RepeatingEnd(Digit),
+    RepeatingEnd,
 }
 
 impl BaseConvertor {
     pub fn new_fraction(mut f: ProperFraction, base: Base) -> Self {
         f.simplify();
+        let g = gcd(f.q, base);
 
         Self {
-            state: BaseConvertorState::Terminal {
-                q_term: f.q,
-                g: base,
-            },
+            state: BaseConvertorState::Terminal { q_term: f.q, g },
             fractional: f,
             base,
         }
@@ -114,19 +123,28 @@ impl BaseConvertor {
 }
 
 impl BaseConvertor {
+    pub fn state(&self) -> &BaseConvertorState {
+        &self.state
+    }
+
     pub fn next_token(&mut self) -> Token {
         match &mut self.state {
             BaseConvertorState::Terminal { q_term, g } => {
-                *g = gcd(*q_term, *g);
                 let d = self.fractional.pull_digit(self.base);
+
+                *g = gcd(*q_term, *g);
+                *q_term /= *g as UInt;
 
                 if g == &1 {
                     self.state = BaseConvertorState::Repeating {
-                        start: self.fractional.r,
+                        start: self.fractional.p,
                     };
-                    Token::RepeatingStart(d)
+                    if self.fractional.numerator() == &0 {
+                        Token::RepeatingEnd
+                    } else {
+                        Token::Repeating(d)
+                    }
                 } else {
-                    *q_term /= *g as UInt;
                     Token::Terminal(d)
                 }
             }
@@ -134,8 +152,8 @@ impl BaseConvertor {
             BaseConvertorState::Repeating { start } => {
                 let d = self.fractional.pull_digit(self.base);
 
-                if self.fractional.r == *start {
-                    Token::RepeatingEnd(d)
+                if self.fractional.p == *start {
+                    Token::RepeatingEnd
                 } else {
                     Token::Repeating(d)
                 }
