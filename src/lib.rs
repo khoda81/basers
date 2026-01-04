@@ -1,7 +1,7 @@
 // use std::collections::HashSet;
 
 type UInt = u128;
-type Base = u32;
+type Base = u128;
 
 fn gcd(a: UInt, b: Base) -> Base {
     todo!()
@@ -16,98 +16,135 @@ fn divmod_base(a: UInt, b: Base) -> (UInt, Base) {
     (a / b as UInt, (a % b as UInt) as Base)
 }
 
-pub struct IntegerPart(UInt);
+pub struct IntegerPart {
+    n: UInt,
+}
 
 impl IntegerPart {
     pub fn new(n: UInt) -> Self {
-        Self(n)
+        Self { n }
     }
 
-    pub fn pop_digit(Self(n): &mut Self, base: Base) -> Base {
+    pub fn pop_digit(&mut self, base: Base) -> Base {
         let d;
-        (*n, d) = divmod_base(*n, base);
+        (self.n, d) = divmod_base(self.n, base);
         d
     }
 
     pub fn is_zero(&self) -> bool {
-        self.0 == 0
+        self.n == 0
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct ProperFraction {
     r: UInt, // remainder
     // TODO: Make this NonZero
     q: UInt, // original denominator
 }
 
-#[derive(Clone)]
-pub struct RepeatingFraction {
-    fraction: ProperFraction,
-    start: UInt,
-    base: Base,
-}
-
-#[derive(Clone)]
-pub enum Fractional {
-    Mixed(UInt, ProperFraction),
-    Repeating(RepeatingFraction),
-}
-
 impl ProperFraction {
     pub fn new(p: UInt, q: UInt) -> (IntegerPart, Self) {
-        let (int, r) = divmod(p, q);
-        (IntegerPart(int), Self { r, q })
+        let mut this = Self { r: p, q };
+        let n = this.pull_digit(q);
+
+        (IntegerPart { n }, this)
+    }
+
+    pub fn simplify(&mut self) -> u128 {
+        let g = gcd(self.r, self.q);
+
+        self.q /= g;
+        self.r /= g;
+
+        g
     }
 
     pub fn pull_digit(&mut self, base: Base) -> UInt {
-        let d;
-        (d, self.r) = divmod(self.r * base as UInt, self.q);
+        let (d, new_r) = divmod(self.r * base as UInt, self.q);
+        self.r = new_r;
         d
     }
 
-    pub fn shifted_fraction(mut self, base: Base) -> Fractional {
-        let g = gcd(self.q, base);
-
-        if g == 1 {
-            return Fractional::Repeating(RepeatingFraction::new_unchecked(base, self));
-        }
-
-        (self.q, _) = divmod_base(self.q, g);
-        let d = self.pull_digit(base / g);
-        Fractional::Mixed(d, self)
+    pub fn denominator(&self) -> UInt {
+        self.q
     }
 }
 
-impl RepeatingFraction {
-    fn new_unchecked(base: Base, fraction: ProperFraction) -> RepeatingFraction {
-        RepeatingFraction {
+pub enum BaseConvertorState {
+    Terminal {
+        // TODO: This can be NonZero
+        q_term: UInt,
+        // TODO: This can be NonZero
+        g: UInt,
+    },
+    Repeating {
+        start: UInt,
+    },
+}
+
+pub struct BaseConvertor {
+    base: Base,
+    fractional: ProperFraction,
+    state: BaseConvertorState,
+}
+
+type Digit = Base;
+
+pub enum Token {
+    Terminal(Digit),
+    Repeating(Digit),
+    RepeatingStart(Digit),
+    RepeatingEnd(Digit),
+}
+
+impl BaseConvertor {
+    pub fn new_fraction(mut f: ProperFraction, base: Base) -> Self {
+        f.simplify();
+
+        Self {
+            state: BaseConvertorState::Terminal {
+                q_term: f.q,
+                g: base,
+            },
+            fractional: f,
             base,
-            fraction,
-            start: fraction.r,
         }
     }
+}
 
-    pub fn pop_repeat_digit(&mut self) -> UInt {
-        self.fraction.pull_digit(self.base)
-    }
+impl BaseConvertor {
+    pub fn next_token(&mut self) -> Token {
+        match &mut self.state {
+            BaseConvertorState::Terminal { q_term, g } => {
+                *g = gcd(*q_term, *g);
+                let d = self.fractional.pull_digit(self.base);
 
-    pub fn is_at_start(&self) -> bool {
-        self.fraction.r == self.start
-    }
+                if g == &1 {
+                    self.state = BaseConvertorState::Repeating {
+                        start: self.fractional.r,
+                    };
+                    Token::RepeatingStart(d)
+                } else {
+                    *q_term /= *g as UInt;
+                    Token::Terminal(d)
+                }
+            }
 
-    pub fn fraction(&self) -> &ProperFraction {
-        &self.fraction
+            BaseConvertorState::Repeating { start } => {
+                let d = self.fractional.pull_digit(self.base);
+
+                if self.fractional.r == *start {
+                    Token::RepeatingEnd(d)
+                } else {
+                    Token::Repeating(d)
+                }
+            }
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
 }
