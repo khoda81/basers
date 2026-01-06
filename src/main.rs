@@ -72,7 +72,6 @@ fn main() -> io::Result<()> {
                     match conv.next_token() {
                         Token::Terminal(_) => unreachable!(),
                         Token::Repeating(d) => out.write_all(&[DIGITS[d as usize]])?,
-
                         Token::RepeatingEnd => break out.write_all(b")")?,
                     };
                 };
