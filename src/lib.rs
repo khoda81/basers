@@ -116,10 +116,12 @@ pub enum Token {
 impl BaseConvertor {
     pub fn new_fraction(mut f: ProperFraction, base: Base) -> Self {
         f.simplify();
-        let g = gcd(f.q, base);
 
         Self {
-            state: BaseConvertorState::Terminal { q_term: f.q, g },
+            state: BaseConvertorState::Terminal {
+                q_term: f.q,
+                g: gcd(f.q, base),
+            },
             fractional: f,
             base,
         }
@@ -132,30 +134,29 @@ impl BaseConvertor {
     }
 
     pub fn next_token(&mut self) -> Token {
+        let d = self.fractional.pull_digit(self.base);
+
         match &mut self.state {
             BaseConvertorState::Terminal { q_term, g } => {
-                let d = self.fractional.pull_digit(self.base);
-
                 *g = gcd(*q_term, *g);
                 *q_term /= *g as UInt;
 
-                if g == &1 {
-                    self.state = BaseConvertorState::Repeating {
-                        start: self.fractional.p,
-                    };
-                    if self.fractional.numerator() == &0 {
-                        Token::RepeatingEnd(d)
-                    } else {
-                        Token::Repeating(d)
+                match g {
+                    1 => {
+                        self.state = BaseConvertorState::Repeating {
+                            start: self.fractional.p,
+                        };
+
+                        match self.fractional.numerator() {
+                            0 => Token::RepeatingEnd(d),
+                            _ => Token::Repeating(d),
+                        }
                     }
-                } else {
-                    Token::Terminal(d)
+                    _ => Token::Terminal(d),
                 }
             }
 
             BaseConvertorState::Repeating { start } => {
-                let d = self.fractional.pull_digit(self.base);
-
                 if self.fractional.p == *start {
                     Token::RepeatingEnd(d)
                 } else {
