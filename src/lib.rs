@@ -71,6 +71,10 @@ impl ProperFraction {
         d
     }
 
+    pub fn is_zero(&self) -> bool {
+        self.numerator() == &0
+    }
+
     pub fn denominator(&self) -> &UInt {
         &self.q
     }
@@ -106,7 +110,7 @@ type Digit = Base;
 pub enum Token {
     Terminal(Digit),
     Repeating(Digit),
-    RepeatingEnd,
+    RepeatingEnd(Digit),
 }
 
 impl BaseConvertor {
@@ -140,7 +144,7 @@ impl BaseConvertor {
                         start: self.fractional.p,
                     };
                     if self.fractional.numerator() == &0 {
-                        Token::RepeatingEnd
+                        Token::RepeatingEnd(d)
                     } else {
                         Token::Repeating(d)
                     }
@@ -153,7 +157,7 @@ impl BaseConvertor {
                 let d = self.fractional.pull_digit(self.base);
 
                 if self.fractional.p == *start {
-                    Token::RepeatingEnd
+                    Token::RepeatingEnd(d)
                 } else {
                     Token::Repeating(d)
                 }
