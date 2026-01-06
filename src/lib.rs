@@ -1,7 +1,7 @@
 // use std::collections::HashSet;
 
-type UInt = u128;
-type Base = u128;
+type UInt = u32;
+type Base = u32;
 
 fn gcd(mut a: UInt, mut b: UInt) -> UInt {
     while b != 0 {
@@ -56,7 +56,7 @@ impl ProperFraction {
         (IntegerPart { n }, this)
     }
 
-    pub fn simplify(&mut self) -> u128 {
+    pub fn simplify(&mut self) -> UInt {
         let g = gcd(self.p, self.q);
 
         self.q /= g;

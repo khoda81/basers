@@ -3,8 +3,8 @@ use std::io::{self, Write};
 
 use basers::{BaseConvertor, ProperFraction, Token};
 
-type UInt = u128;
-type Base = u128;
+type UInt = u32;
+type Base = u32;
 
 const DIGITS: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
@@ -16,7 +16,7 @@ fn parse_fraction(s: &str) -> (UInt, UInt) {
     )
 }
 
-fn main() {
+fn main() -> io::Result<()> {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         eprintln!("usage: baser p/q --base N");
@@ -37,10 +37,6 @@ fn main() {
     /* ---- integer part ---- */
 
     let (mut int, frac) = ProperFraction::new(p, q);
-
-    // dbg!(&int.n);
-    // dbg!(frac.numerator(), frac.denominator());
-
     let mut int_buf = Vec::new();
     while !int.is_zero() {
         int_buf.push(DIGITS[int.pop_digit(base) as usize]);
@@ -49,18 +45,16 @@ fn main() {
 
     let mut out = io::BufWriter::new(io::stdout());
     if int_buf.is_empty() {
-        out.write_all(&[DIGITS[0]])
+        out.write_all(&[DIGITS[0]])?;
     } else {
-        out.write_all(&int_buf)
+        out.write_all(&int_buf)?;
     }
-    .unwrap();
 
     if frac.numerator() == &0 {
-        out.write_all(b"\n").unwrap();
-        return;
+        return out.write_all(b"\n");
     }
 
-    out.write_all(b".").unwrap();
+    out.write_all(b".")?;
 
     /* ---- fractional part (streaming) ---- */
 
@@ -68,61 +62,27 @@ fn main() {
 
     loop {
         match conv.next_token() {
-            Token::Terminal(d) => {
-                out.write_all(&[DIGITS[d as usize]]).unwrap();
-            }
+            Token::Terminal(d) => out.write_all(&[DIGITS[d as usize]])?,
 
             Token::Repeating(d) => {
-                out.write_all(b"(").unwrap();
-                out.write_all(&[DIGITS[d as usize]]).unwrap();
+                out.write_all(b"(")?;
+                out.write_all(&[DIGITS[d as usize]])?;
 
-                loop {
+                break loop {
                     match conv.next_token() {
                         Token::Terminal(_) => unreachable!(),
-                        Token::Repeating(d) => {
-                            out.write_all(&[DIGITS[d as usize]]).unwrap();
-                        }
+                        Token::Repeating(d) => out.write_all(&[DIGITS[d as usize]])?,
 
-                        Token::RepeatingEnd => {
-                            out.write_all(b")").unwrap();
-                            break;
-                        }
+                        Token::RepeatingEnd => break out.write_all(b")")?,
                     };
-                }
-
-                break;
+                };
             }
 
-            Token::RepeatingEnd => {
-                break;
-            }
+            Token::RepeatingEnd => break,
         }
     }
-    // loop {
-    //     dbg!(&conv);
-    //     match dbg!(conv.next_token()) {
-    //         Token::Terminal(d) => {
-    //             out.write_all(b"Term(").unwrap();
-    //             out.write_all(&[DIGITS[d as usize]]).unwrap();
-    //             out.write_all(b")\n").unwrap();
-    //         }
 
-    //         Token::Repeating(d) => {
-    //             out.write_all(b"Rep(").unwrap();
-    //             out.write_all(&[DIGITS[d as usize]]).unwrap();
-    //             out.write_all(b")\n").unwrap();
-    //         }
+    out.write_all(b"\n")?;
 
-    //         Token::RepeatingEnd(d) => {
-    //             out.write_all(b"End(").unwrap();
-    //             // out.write_all(&[DIGITS[d as usize]]).unwrap();
-    //             out.write_all(b")\n").unwrap();
-    //             break;
-    //         }
-    //     }
-    // }
-
-    // let seen_repeating = false;
-
-    out.write_all(b"\n").unwrap();
+    Ok(())
 }
