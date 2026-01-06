@@ -3,6 +3,7 @@
 type UInt = u32;
 type Base = u32;
 
+// TODO: Use an optimized GCD implementation
 fn gcd(mut a: UInt, mut b: UInt) -> UInt {
     while b != 0 {
         let r = a % b;
@@ -129,38 +130,66 @@ impl BaseConvertor {
 }
 
 impl BaseConvertor {
+    /// Expose the current internal state (Terminal vs Repeating).
+    /// Useful for debugging, testing, or introspection.
     pub fn state(&self) -> &BaseConvertorState {
         &self.state
     }
 
+    /// Produce the next digit token of the fractional expansion.
+    ///
+    /// This function streams digits one by one and transitions
+    /// between the `Terminal` and `Repeating` states based on
+    /// number-theoretic properties of the denominator.
     pub fn next_token(&mut self) -> Token {
-        let d = self.fractional.pull_digit(self.base);
+        // Emit the next base-`base` digit of the fraction:
+        //   d = floor((p * base) / q)
+        // and update the remainder p ← (p * base) mod q.
+        let digit = self.fractional.pull_digit(self.base);
 
         match &mut self.state {
             BaseConvertorState::Terminal { q_term, g } => {
+                // In the terminal phase, we progressively remove
+                // common factors between the denominator and the base.
+                //
+                // As long as q has factors in common with the base,
+                // the expansion can still terminate.
                 *g = gcd(*q_term, *g);
                 *q_term /= *g as UInt;
 
                 match g {
+                    // When gcd(q, base) == 1, no further cancellation
+                    // is possible: from this point onward the expansion
+                    // must repeat.
                     1 => {
+                        // Transition into the repeating phase.
+                        // The current remainder marks the start of the cycle.
                         self.state = BaseConvertorState::Repeating {
                             start: self.fractional.p,
                         };
 
+                        // If the remainder is already zero, the expansion
+                        // terminates exactly on this digit.
                         match self.fractional.numerator() {
-                            0 => Token::RepeatingEnd(d),
-                            _ => Token::Repeating(d),
+                            0 => Token::RepeatingEnd(digit),
+                            _ => Token::Repeating(digit),
                         }
                     }
-                    _ => Token::Terminal(d),
+
+                    // Still in the terminal phase: emit a normal
+                    // non-repeating digit.
+                    _ => Token::Terminal(digit),
                 }
             }
 
             BaseConvertorState::Repeating { start } => {
+                // In the repeating phase, the expansion cycles when
+                // the remainder returns to its value at the start
+                // of the repeating block.
                 if self.fractional.p == *start {
-                    Token::RepeatingEnd(d)
+                    Token::RepeatingEnd(digit)
                 } else {
-                    Token::Repeating(d)
+                    Token::Repeating(digit)
                 }
             }
         }
